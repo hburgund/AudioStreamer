@@ -30,7 +30,7 @@
 #define BitRateEstimationMinPackets 50
 
 NSString * const ASStatusChangedNotification = @"ASStatusChangedNotification";
-NSString * const ASAudioSessionInterruptionOccuredNotification = @"ASAudioSessionInterruptionOccuredNotification";
+//NSString * const ASAudioSessionInterruptionOccuredNotification = @"ASAudioSessionInterruptionOccuredNotification";
 
 NSString * const AS_NO_ERROR_STRING = @"No error.";
 NSString * const AS_FILE_STREAM_GET_PROPERTY_FAILED_STRING = @"File stream get property failed.";
@@ -172,9 +172,9 @@ static void ASAudioQueueIsRunningCallback(void *inUserData, AudioQueueRef inAQ, 
 //
 // Invoked if the audio session is interrupted (like when the phone rings)
 //
-static void ASAudioSessionInterruptionListener(__unused void * inClientData, UInt32 inInterruptionState) {
-    [[NSNotificationCenter defaultCenter] postNotificationName:ASAudioSessionInterruptionOccuredNotification object:@(inInterruptionState)];
-}
+//static void ASAudioSessionInterruptionListener(__unused void * inClientData, UInt32 inInterruptionState) {
+//    [[NSNotificationCenter defaultCenter] postNotificationName:ASAudioSessionInterruptionOccuredNotification object:@(inInterruptionState)];
+//}
 #endif
 
 #pragma mark CFReadStream Callback Function Implementations
@@ -218,7 +218,7 @@ static void ASReadStreamCallBack
 	if (self != nil)
 	{
 		url = [aURL retain];
-		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleInterruptionChangeToState:) name:ASAudioSessionInterruptionOccuredNotification object:nil];
+//		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleInterruptionChangeToState:) name:ASAudioSessionInterruptionOccuredNotification object:nil];
 	}
 	return self;
 }
@@ -230,7 +230,7 @@ static void ASReadStreamCallBack
 //
 - (void)dealloc
 {
-	[[NSNotificationCenter defaultCenter] removeObserver:self name:ASAudioSessionInterruptionOccuredNotification object:nil];
+//	[[NSNotificationCenter defaultCenter] removeObserver:self name:ASAudioSessionInterruptionOccuredNotification object:nil];
 	[self stop];
 	[url release];
 	[fileExtension release];
@@ -780,6 +780,7 @@ static void ASReadStreamCallBack
 		// Set the audio session category so that we continue to play if the
 		// iPhone/iPod auto-locks.
 		//
+#if 0   // THE OLD WAY
 		AudioSessionInitialize (
 			NULL,                          // 'NULL' to use the default (main) run loop
 			NULL,                          // 'NULL' to use the default run loop mode
@@ -793,6 +794,20 @@ static void ASReadStreamCallBack
 			&sessionCategory
 		);
 		AudioSessionSetActive(true);
+#else
+        
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleInterruptionChangeToState:)
+            name:AVAudioSessionInterruptionNotification object:[AVAudioSession sharedInstance]];
+        
+        NSError *setCategoryError = nil;
+        BOOL setCategoryResult = [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback error:&setCategoryError];
+        #pragma unused (setCategoryResult) // ignore errors
+        
+        NSError *setActiveError = nil;
+        BOOL setActiveResult = [[AVAudioSession sharedInstance] setActive:YES error:&setActiveError];
+        #pragma unused (setActiveResult) // ignore errors
+#endif
+
 	#endif
 	
 		// initialize a mutex and condition so that we can block on buffers in use.
@@ -883,7 +898,9 @@ cleanup:
 		pthread_cond_destroy(&queueBufferReadyCondition);
 
 #if TARGET_OS_IPHONE			
-		AudioSessionSetActive(false);
+        NSError *setActiveError = nil;
+        BOOL setActiveResult = [[AVAudioSession sharedInstance] setActive:NO error:&setActiveError];
+        #pragma unused (setActiveResult) // ignore errors
 #endif
 
 		[httpHeaders release];
@@ -979,7 +996,7 @@ cleanup:
 		if (!err && !(ioFlags & kAudioFileStreamSeekFlag_OffsetIsEstimated))
 		{
 			seekTime -= ((seekByteOffset - dataOffset) - packetAlignedByteOffset) * 8.0 / calculatedBitRate;
-			seekByteOffset = packetAlignedByteOffset + dataOffset;
+			seekByteOffset = (NSInteger)(packetAlignedByteOffset + dataOffset);
 		}
 	}
 
@@ -1589,11 +1606,11 @@ cleanup:
 				[self failWithErrorCode:AS_FILE_STREAM_GET_PROPERTY_FAILED];
 				return;
 			}
-			dataOffset = offset;
+			dataOffset = (NSInteger)offset;
 			
 			if (audioDataByteCount)
 			{
-				fileLength = dataOffset + audioDataByteCount;
+				fileLength = (NSInteger)(dataOffset + audioDataByteCount);
 			}
 		}
 		else if (inPropertyID == kAudioFileStreamProperty_AudioDataByteCount)
@@ -1605,7 +1622,7 @@ cleanup:
 				[self failWithErrorCode:AS_FILE_STREAM_GET_PROPERTY_FAILED];
 				return;
 			}
-			fileLength = dataOffset + audioDataByteCount;
+			fileLength = (NSInteger)(dataOffset + audioDataByteCount);
 		}
 		else if (inPropertyID == kAudioFileStreamProperty_DataFormat)
 		{
@@ -1984,25 +2001,46 @@ cleanup:
 //    inID - the property ID
 //
 - (void)handleInterruptionChangeToState:(NSNotification *)notification {
-    AudioQueuePropertyID inInterruptionState = (AudioQueuePropertyID) [notification.object unsignedIntValue];
-	if (inInterruptionState == kAudioSessionBeginInterruption)
-	{ 
+    AVAudioSessionInterruptionType interruptionType = [[[notification userInfo] objectForKey:AVAudioSessionInterruptionTypeKey] unsignedIntegerValue];
+    if (AVAudioSessionInterruptionTypeBegan == interruptionType) {
 		if ([self isPlaying]) {
 			[self pause];
 			
 			pausedByInterruption = YES; 
 		} 
-	}
-	else if (inInterruptionState == kAudioSessionEndInterruption) 
-	{
-		AudioSessionSetActive( true );
-		
+    } else if (AVAudioSessionInterruptionTypeEnded == interruptionType) {
+        NSError *setActiveError = nil;
+        BOOL setActiveResult = [[AVAudioSession sharedInstance] setActive:YES error:&setActiveError];
+		#pragma unused (setActiveResult) // ignore errors
+        
 		if ([self isPaused] && pausedByInterruption) {
 			[self pause]; // this is actually resume
 			
 			pausedByInterruption = NO; // this is redundant 
 		}
-	}
+    }
+
+// OLD WAY
+//    AudioQueuePropertyID inInterruptionState = (AudioQueuePropertyID) [notification.object unsignedIntValue];
+//	if (inInterruptionState == kAudioSessionBeginInterruption)
+//	{ 
+//		if ([self isPlaying]) {
+//			[self pause];
+//			
+//			pausedByInterruption = YES; 
+//		} 
+//	}
+//	else if (inInterruptionState == kAudioSessionEndInterruption) 
+//	{
+//        NSError *setActiveError = nil;
+//        BOOL setActiveResult = [[AVAudioSession sharedInstance] setActive:YES error:&setActiveError];
+//		
+//		if ([self isPaused] && pausedByInterruption) {
+//			[self pause]; // this is actually resume
+//			
+//			pausedByInterruption = NO; // this is redundant 
+//		}
+//	}
 }
 #endif
 
