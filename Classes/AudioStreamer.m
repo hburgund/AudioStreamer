@@ -799,13 +799,13 @@ static void ASReadStreamCallBack
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleInterruptionChangeToState:)
             name:AVAudioSessionInterruptionNotification object:[AVAudioSession sharedInstance]];
         
-        NSError *setCategoryError = nil;
-        BOOL setCategoryResult = [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback error:&setCategoryError];
-        #pragma unused (setCategoryResult) // ignore errors
-        
-        NSError *setActiveError = nil;
-        BOOL setActiveResult = [[AVAudioSession sharedInstance] setActive:YES error:&setActiveError];
-        #pragma unused (setActiveResult) // ignore errors
+//        NSError *setCategoryError = nil;
+//        BOOL setCategoryResult = [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback error:&setCategoryError];
+//        #pragma unused (setCategoryResult) // ignore errors
+//        
+//        NSError *setActiveError = nil;
+//        BOOL setActiveResult = [[AVAudioSession sharedInstance] setActive:YES error:&setActiveError];
+//        #pragma unused (setActiveResult) // ignore errors
 #endif
 
 	#endif
